@@ -20,10 +20,18 @@ public class LoginServlet extends HttpServlet {
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");
 
+            // Railway वर localhost शोधताना अडचण येऊ शकते
             con = DriverManager.getConnection(
                 "jdbc:mysql://localhost:3306/krushi","root","Root");
 
-            // ✅ Role column add केलेला असावा DB मध्ये
+            // ✅ SAFETY CHECK: जर कनेक्शन null असेल तर प्रोजेक्ट क्रॅश होऊ नये
+            if (con == null) {
+                System.out.println("Login Failed: Database connection is null.");
+                res.sendRedirect("login.jsp?msg=db_error");
+                return;
+            }
+
+            // Role column तपासून लॉगिन करणे
             ps = con.prepareStatement(
                 "SELECT * FROM users WHERE email=? AND password=?"
             );
@@ -35,16 +43,15 @@ public class LoginServlet extends HttpServlet {
 
             if(rs.next()){
 
-                // ✅ SESSION
+                // ✅ SESSION मॅनेजमेंट
                 HttpSession session = req.getSession();
                 session.setAttribute("user", rs.getString("name"));
                 session.setAttribute("email", rs.getString("email"));
 
-                // ✅ ROLE GET
+                // ✅ ROLE प्रमाणे रिडायरेक्ट करणे
                 String role = rs.getString("role"); // admin / farmer
                 session.setAttribute("role", role);
 
-                // ✅ REDIRECT BASED ON ROLE
                 if("admin".equalsIgnoreCase(role)){
                     res.sendRedirect("admin-dashboard.jsp");
                 } 
@@ -53,13 +60,15 @@ public class LoginServlet extends HttpServlet {
                 }
 
             } else {
+                // चुकीचा आयडी किंवा पासवर्ड
                 res.sendRedirect("login.jsp?msg=invalid");
             }
 
         } catch(Exception e) {
-            e.printStackTrace();
+            e.printStackTrace(); // Logs मध्ये त्रुटी तपासण्यासाठी
             res.sendRedirect("login.jsp?msg=exception");
         } finally {
+            // सर्व रिसोर्सेस सुरक्षितपणे बंद करणे
             try { if(rs != null) rs.close(); } catch(Exception e){}
             try { if(ps != null) ps.close(); } catch(Exception e){}
             try { if(con != null) con.close(); } catch(Exception e){}
