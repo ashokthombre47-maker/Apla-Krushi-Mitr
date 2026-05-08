@@ -10,25 +10,41 @@ public class DeleteUserServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse res)
     throws ServletException, IOException {
 
-        int id = Integer.parseInt(req.getParameter("id"));
+        // ID मिळवणे
+        String idParam = req.getParameter("id");
+        Connection con = null;
+        PreparedStatement ps = null;
 
-        try{
-            Class.forName("com.mysql.cj.jdbc.Driver");
+        try {
+            if (idParam != null) {
+                int id = Integer.parseInt(idParam);
 
-            Connection con = DriverManager.getConnection(
-                "jdbc:mysql://localhost:3306/krushi","root","Root");
+                Class.forName("com.mysql.cj.jdbc.Driver");
 
-            PreparedStatement ps = con.prepareStatement(
-                "DELETE FROM users WHERE id=?"
-            );
+                con = DriverManager.getConnection(
+                    "jdbc:mysql://localhost:3306/krushi", "root", "Root");
 
-            ps.setInt(1, id);
-            ps.executeUpdate();
+                // ✅ SAFETY CHECK: जर कनेक्शन नसेल तर एरर टाळण्यासाठी
+                if (con == null) {
+                    System.out.println("Delete Failed: Database connection is null.");
+                    res.sendRedirect("admin-dashboard.jsp?msg=db_error");
+                    return;
+                }
 
-            res.sendRedirect("admin-dashboard.jsp");
+                ps = con.prepareStatement("DELETE FROM users WHERE id=?");
+                ps.setInt(1, id);
+                ps.executeUpdate();
+            }
 
-        }catch(Exception e){
+            res.sendRedirect("admin-dashboard.jsp?msg=deleted");
+
+        } catch (Exception e) {
             e.printStackTrace();
+            res.sendRedirect("admin-dashboard.jsp?msg=exception");
+        } finally {
+            // ✅ RESOURCES बंद करणे (Memory Leak टाळण्यासाठी)
+            try { if (ps != null) ps.close(); } catch (Exception e) {}
+            try { if (con != null) con.close(); } catch (Exception e) {}
         }
     }
 }
