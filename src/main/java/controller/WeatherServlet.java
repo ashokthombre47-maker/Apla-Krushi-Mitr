@@ -11,128 +11,116 @@ public class WeatherServlet extends HttpServlet {
     throws ServletException, IOException {
 
         String city = req.getParameter("city");
-
-        String apiKey = "9f6667606901e77a483ff8bc44599445";
-        String urlStr = "https://api.openweathermap.org/data/2.5/weather?q="
-                + city + "&appid=" + apiKey + "&units=metric";
-
-        URL url = new URL(urlStr);
-        HttpURLConnection con = (HttpURLConnection) url.openConnection();
-        con.setRequestMethod("GET");
-
-        if(con.getResponseCode() != 200){
-            req.setAttribute("error", "❌ City not found / API issue");
-            RequestDispatcher rd = req.getRequestDispatcher("weather.jsp");
-            rd.forward(req, res);
+        
+        // जर शहराचे नाव रिकामे असेल तर
+        if(city == null || city.trim().isEmpty()){
+            res.sendRedirect("weather.jsp?error=invalid_city");
             return;
         }
 
-        BufferedReader br = new BufferedReader(
-                new InputStreamReader(con.getInputStream()));
+        // सुरक्षिततेसाठी शहराचे नाव एन्कोड करा (उदा. 'New York' -> 'New%20York')
+        String encodedCity = URLEncoder.encode(city, "UTF-8");
+        String apiKey = "9f6667606901e77a483ff8bc44599445";
+        String urlStr = "https://api.openweathermap.org/data/2.5/weather?q="
+                + encodedCity + "&appid=" + apiKey + "&units=metric";
 
-        String line, result = "";
-        while((line = br.readLine()) != null){
-            result += line;
-        }
-
-        // ✅ FIXED parsing (more accurate)
-
-        double temp = getDouble(result, "\"temp\":");
-        double feelsLike = getDouble(result, "\"feels_like\":");
-        int humidity = (int) getDouble(result, "\"humidity\":");
-        double windSpeed = getDouble(result, "\"speed\":");
-
-        // 🔥 FIX: weather extraction improved
-        String weather = getWeather(result);
-
-        // 🌧️ Rain (more stable)
-        double rain = 0;
         try {
+            URL url = new URL(urlStr);
+            HttpURLConnection con = (HttpURLConnection) url.openConnection();
+            con.setRequestMethod("GET");
+            con.setConnectTimeout(5000); // ५ सेकंदात कनेक्ट नाही झाले तर टाइमआउट
+
+            if(con.getResponseCode() != 200){
+                req.setAttribute("error", "❌ शहर सापडले नाही किंवा इंटरनेट समस्या!");
+                req.getRequestDispatcher("weather.jsp").forward(req, res);
+                return;
+            }
+
+            BufferedReader br = new BufferedReader(new InputStreamReader(con.getInputStream()));
+            StringBuilder responseBuilder = new StringBuilder();
+            String line;
+            while((line = br.readLine()) != null){
+                responseBuilder.append(line);
+            }
+            br.close();
+            
+            String result = responseBuilder.toString();
+
+            // डेटा पार्सिंग (Parsing)
+            double temp = getDouble(result, "\"temp\":");
+            double feelsLike = getDouble(result, "\"feels_like\":");
+            int humidity = (int) getDouble(result, "\"humidity\":");
+            double windSpeed = getDouble(result, "\"speed\":");
+            String weather = getWeather(result);
+
+            // पावसाचा अंदाज
+            double rain = 0;
             if(result.contains("\"rain\"") && result.contains("\"1h\"")){
                 rain = getDouble(result, "\"1h\":");
             }
-        } catch(Exception e){
-            rain = 0;
-        }
 
-        String advice = "";
-        String rainAlert = "";
+            // सल्ला (Advice Logic)
+            String advice = "";
+            String statusIcon = "✅";
 
-        if(rain > 0){
-            rainAlert = "🌧️ सध्या पाऊस पडतोय (" + rain + " mm)";
-            advice = "⚠️ पेरणी थांबवा | खत टाकू नका | कापणी टाळा";
-        }
-        else if(weather.equalsIgnoreCase("Clouds")){
-            rainAlert = "☁️ ढगाळ वातावरण";
-
-            if(humidity > 75 && windSpeed < 3){
-                advice = "👉 पावसाची शक्यता आहे – तयारी ठेवा";
+            if(rain > 0){
+                statusIcon = "🌧️";
+                advice = "⚠️ पाऊस सुरू आहे - पेरणी किंवा कापणी थांबवा. खत टाकू नका.";
+            } else if(weather.equalsIgnoreCase("Clouds")){
+                statusIcon = "☁️";
+                advice = (humidity > 75) ? "👉 पावसाची दाट शक्यता - सतर्क राहा." : "✅ हवामान ढगाळ आहे, कामे सुरू ठेवू शकता.";
+            } else if(temp > 35){
+                statusIcon = "🔥";
+                advice = "उष्णता वाढली आहे - पिकांना पाणी द्या, दुपारी काम टाळा.";
+            } else if(windSpeed > 8){
+                statusIcon = "🌬️";
+                advice = "जोरात वारा सुटला आहे - फवारणी टाळा.";
             } else {
-                advice = "✅ सध्या पाऊस नाही – शेती काम सुरू ठेवा";
+                advice = "हवामान अनुकूल आहे - शेतीची कामे वेळेत पूर्ण करा.";
             }
-        }
-        else if(temp > 35 || feelsLike > 38){
-            rainAlert = "🔥 उष्णता जास्त आहे";
-            advice = "पिकांना पाणी द्या | दुपारी सिंचन टाळा";
-        }
-        else if(temp < 15){
-            rainAlert = "❄️ थंडी जास्त आहे";
-            advice = "पिकांचे संरक्षण करा";
-        }
-        else if(humidity > 85){
-            rainAlert = "💧 आर्द्रता खूप जास्त आहे";
-            advice = "रोगांचा धोका – फवारणी करा";
-        }
-        else if(windSpeed > 8){
-            rainAlert = "🌬️ जोरदार वारा";
-            advice = "फवारणी टाळा | पिकांचे संरक्षण करा";
-        }
-        else{
-            rainAlert = "✅ हवामान सामान्य आहे";
-            advice = "शेती कामे सुरू ठेवा";
+
+            // JSP कडे डेटा पाठवणे
+            req.setAttribute("city", city.toUpperCase());
+            req.setAttribute("temp", temp);
+            req.setAttribute("humidity", humidity);
+            req.setAttribute("weather", weather);
+            req.setAttribute("statusIcon", statusIcon);
+            req.setAttribute("advice", advice);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            req.setAttribute("error", "API शी संपर्क होऊ शकला नाही.");
         }
 
-        req.setAttribute("city", city);
-        req.setAttribute("temp", temp);
-        req.setAttribute("humidity", humidity);
-        req.setAttribute("weather", weather);
-        req.setAttribute("rainAlert", rainAlert);
-        req.setAttribute("advice", advice);
-
-        RequestDispatcher rd = req.getRequestDispatcher("weather.jsp");
-        rd.forward(req, res);
+        req.getRequestDispatcher("weather.jsp").forward(req, res);
     }
 
-    // 🔒 SAFE NUMBER PARSER
+    // सुरक्षित नंबर पार्सर
     private double getDouble(String json, String key){
         try {
             String temp = json.split(key)[1];
-            String value = "";
-
+            StringBuilder value = new StringBuilder();
             for(int i=0; i<temp.length(); i++){
                 char c = temp.charAt(i);
-
                 if((c >= '0' && c <= '9') || c == '.'){
-                    value += c;
+                    value.append(c);
                 } else {
                     break;
                 }
             }
-
-            return Double.parseDouble(value);
+            return Double.parseDouble(value.toString());
         } catch(Exception e){
             return 0;
         }
     }
 
-    // 🔥 FIXED WEATHER PARSER
+    // वेदर पार्सर
     private String getWeather(String json){
         try {
             if(json.contains("\"main\":\"")){
                 return json.split("\"main\":\"")[1].split("\"")[0];
             }
-        } catch(Exception e){
-        }
+        } catch(Exception e) {}
         return "N/A";
     }
 }
