@@ -74,7 +74,7 @@
         <url-pattern>/PestServlet</url-pattern>
     </servlet-mapping>
 
-    <!-- Crop Calendar -->
+    <!-- Crop Calendar 
     <servlet>
         <servlet-name>CropCalendarServlet</servlet-name>
         <servlet-class>controller.CropCalendarServlet</servlet-class>
@@ -82,7 +82,7 @@
     <servlet-mapping>
         <servlet-name>CropCalendarServlet</servlet-name>
         <url-pattern>/CropCalendarServlet</url-pattern>
-    </servlet-mapping>
+    </servlet-mapping> -->
     <servlet>
     <servlet-name>UpdateUserServlet</servlet-name>
     <servlet-class>controller.UpdateUserServlet</servlet-class>
